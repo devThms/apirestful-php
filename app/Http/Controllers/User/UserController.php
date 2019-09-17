@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\User;
 
-use Illuminate\Http\Request;
-use App\Http\Controllers\Controller;
-
 use App\Model\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+use App\Http\Controllers\Controller;
 
 class UserController extends Controller
 {
@@ -41,18 +41,29 @@ class UserController extends Controller
             'password' => 'required|min:6|confirmed'
         ];
 
-        $this->validate($request, $rules);
+        $validator = Validator::make($request->all(), $rules);
 
-        $req = $request->all();
-        $req['password'] = bcrypt($request->password);
-        $req['verified'] = User::USUARIO_NO_VERIFICADO;
-        $req['verification_token'] = User::generarVerificationToken();
-        $req['admin'] = User::USUARIO_REGULAR;
+        if ($validator->fails())
+        {
+            $errors = $validator->errors();
 
-        $usuario = User::create($req);
+            return response()->json([
+                'ok' => false,
+                'message' => 'Error en validación de formulario',
+                'errors' => $errors
+            ], 400);
+
+        }
+
+        $request['password'] = bcrypt($request->password);
+        $request['verified'] = User::USUARIO_NO_VERIFICADO;
+        $request['verification_token'] = User::generarVerificationToken();
+        $request['admin'] = User::USUARIO_REGULAR;
+
+        $user = User::create($request->all());
 
         return response()->json([
-            'data' => $usuario
+            'data' => $user
         ], 201);
 
     }
@@ -63,13 +74,11 @@ class UserController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show(User $user)
     {
 
-        $usuario = User::findOrFail($id);  
-        
         return response()->json([
-            'data' => $usuario
+            'data' => $user
         ], 200);
 
     }
@@ -81,55 +90,64 @@ class UserController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, User $user)
     {
         
-        $usuario = User::findOrFail($id);
-
         $rules = [
-            'email' => 'email|unique:users,email,' . $usuario->id,
+            'email' => 'email|unique:users,email,' . $user->id,
             'password' => 'min:6|confirmed',
             'admin' => 'in:' . User::USUARIO_ADMIN . ',' . User::USUARIO_REGULAR
         ];
 
-        $this->validate($request, $rules);
+        $validator = Validator::make($request->all(), $rules);
 
-        if ($request->has('name')) {
-            $usuario->name = $request->name;
+        if ($validator->fails())
+        {
+            $errors = $validator->errors();
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Existe un error de validación en el formulario',
+                'errors' => $errors
+            ], 422);
         }
 
-        if ($request->has('email') && $usuario->email != $request->email) {
-            $usuario->verified = User::USUARIO_NO_VERIFICADO;
-            $usuario->verification_token = User::generarVerificationToken();
-            $usuario->email = $request->email;
+        if ($request->has('name')) {
+            $user->name = $request->name;
         }
 
         if ($request->has('password')) {
-            $usuario->password = bcrypt($request->password);
+            $user->password = bcrypt($request->password);
+        }
+
+        if ($request->has('email') && $user->email != $request->email) {
+            $user->verified = User::USUARIO_NO_VERIFICADO;
+            $user->verification_token = User::generarVerificationToken();
+            $user->email = $request->email;
         }
 
         if ($request->has('admin')) {
-            if (!$usuario->esVerificado()) {
+            if (!$user->esVerificado()) {
                 return response()->json([
                     'error' => 'Unicamente los usuarios verificados pueden cambiar su valor de administrador',
                     'code' => '409'
                 ], 409);
             }
 
-            $usuario->admin = $request->admin;
+            $user->admin = $request->admin;
         }
 
-        if (!$usuario->isDirty()) {
+        if ($user->isClean()) {
             return response()->json([
                 'error' => 'Se debe especificar al menos un valor diferente para actualizar',
                 'code' => '422'
             ], 422);
         }
 
-        $usuario->save();
+        $user->save();
 
         return response()->json([
-            'data' => $usuario
+            'data' => $user
         ], 200);
 
     }
@@ -140,15 +158,13 @@ class UserController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy(User $user)
     {
 
-        $usuario = User::findOrFail($id);
-
-        $usuario->delete();
+        $user->delete();
 
         return response()->json([
-            'data' => $usuario
+            'data' => $user
         ], 200);
 
     }

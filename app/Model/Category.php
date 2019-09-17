@@ -14,7 +14,7 @@ class Category extends Model
 
     protected $dates = ['deleted_at'];
 
-    protected $filable = [
+    protected $fillable = [
         'name',
         'description'
     ];
